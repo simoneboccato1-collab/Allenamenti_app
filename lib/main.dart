@@ -34,7 +34,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   Map<String, List<String>> esercizi = {};
-  Map<String, String> pesi = <String, String>{};
+  Map<String, String> pesi = {};
 
   bool invioInCorso = false;
 
@@ -44,6 +44,8 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController noteController =
       TextEditingController();
 
+  final String url =
+    'https://script.google.com/macros/s/AKfycbx5wxWJC-5kRfgcdi4Bn7Y75dybw4ilppbYg554NaxAZzhqcqJVkSZkL0jFGW5FwCCe6Q/exec';
   @override
   void initState() {
     super.initState();
@@ -51,14 +53,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> caricaEsercizi() async {
-    const String url =
-        'https://script.google.com/macros/s/AKfycbx5wxWJC-5kRfgcdi4Bn7Y75dybw4ilppbYg554NaxAZzhqcqJVkSZkL0jFGW5FwCCe6Q/exec';
-
     try {
       final risposta = await http.get(
-        Uri.parse(
-          '$url?azione=esercizi',
-        ),
+        Uri.parse('$url?azione=esercizi'),
       );
 
       print('==============================');
@@ -69,14 +66,14 @@ class _HomePageState extends State<HomePage> {
       print('==============================');
 
       if (risposta.statusCode != 200) {
-        print('❌ Errore caricamento esercizi');
+        print('Errore caricamento esercizi');
         return;
       }
 
       final dati = jsonDecode(risposta.body);
 
       if (dati is! List || dati.isEmpty) {
-        print('❌ Dati esercizi non validi');
+        print('Dati esercizi non validi');
         return;
       }
 
@@ -85,41 +82,65 @@ class _HomePageState extends State<HomePage> {
       for (int i = 1; i < dati.length; i++) {
         final riga = dati[i];
 
-        if (riga.length < 3) {
+        if (riga is! List || riga.length < 3) {
           continue;
         }
 
-        final String giorno = riga[0].toString();
+        final String nomeGiorno =
+            riga[0].toString().trim();
 
-        final String nome = riga[1]
+        final String nomeEsercizio = riga[1]
             .toString()
             .replaceAll('\n', ' ')
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim();
 
-        if (giorno.isEmpty || nome.isEmpty) {
+        if (nomeGiorno.isEmpty ||
+            nomeEsercizio.isEmpty) {
           continue;
         }
 
-        nuoviEsercizi.putIfAbsent(giorno, () => []);
-        nuoviEsercizi[giorno]!.add(nome);
+        nuoviEsercizi.putIfAbsent(
+          nomeGiorno,
+          () => [],
+        );
+
+        nuoviEsercizi[nomeGiorno]!.add(
+          nomeEsercizio,
+        );
       }
 
       if (!mounted) return;
 
       setState(() {
         esercizi = nuoviEsercizi;
+
+        if (!esercizi.containsKey(giorno) &&
+            esercizi.isNotEmpty) {
+          giorno = esercizi.keys.first;
+        }
       });
 
-      print('✅ ESERCIZI CARICATI');
+      print('ESERCIZI CARICATI:');
       print(nuoviEsercizi);
     } catch (e) {
-      print('❌ Errore caricamento esercizi: $e');
+      print('Errore caricamento esercizi: $e');
     }
   }
 
   Future<void> inviaAGoogle() async {
     if (invioInCorso) return;
+
+    if (!esercizi.containsKey(giorno)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nessun esercizio disponibile.',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       invioInCorso = true;
@@ -131,8 +152,8 @@ class _HomePageState extends State<HomePage> {
     for (final esercizio in esercizi[giorno]!) {
       final peso = pesi[esercizio] ?? '';
 
-      if (peso.isNotEmpty) {
-        nota += '$esercizio ${peso}kg\n';
+      if (peso.trim().isNotEmpty) {
+        nota += '$esercizio ${peso.trim()}kg\n';
       }
     }
 
@@ -146,9 +167,6 @@ class _HomePageState extends State<HomePage> {
     print('------------------------------');
     print(nota);
     print('==============================');
-
-    const String url =
-        'https://script.google.com/macros/s/AKfycbx5wxWJC-5kRfgcdi4Bn7Y75dybw4ilppbYg554NaxAZzhqcqJVkSZkL0jFGW5FwCCe6Q/exec';
 
     try {
       final uri = Uri.parse(url).replace(
@@ -169,13 +187,23 @@ class _HomePageState extends State<HomePage> {
         invioInCorso = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Allenamento inviato a Google!',
+      if (risposta.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Allenamento inviato a Google!',
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Errore Google: ${risposta.statusCode}',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       print('ERRORE INVIO: $e');
 
@@ -203,6 +231,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final listaEsercizi = esercizi[giorno] ?? [];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
 
@@ -221,10 +251,6 @@ class _HomePageState extends State<HomePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-
-          // ==============================
-          // SETTIMANA E GIORNO
-          // ==============================
 
           Card(
             elevation: 0,
@@ -343,7 +369,7 @@ class _HomePageState extends State<HomePage> {
 
                       setState(() {
                         giorno = value;
-                        pesi = <String, String>{};
+                        pesi = {};
                       });
                     },
                   ),
@@ -353,10 +379,6 @@ class _HomePageState extends State<HomePage> {
           ),
 
           const SizedBox(height: 20),
-
-          // ==============================
-          // ESERCIZI
-          // ==============================
 
           Card(
             elevation: 0,
@@ -384,7 +406,7 @@ class _HomePageState extends State<HomePage> {
                       ),
 
                       Text(
-                        '${esercizi[giorno]?.length ?? 0}',
+                        '${listaEsercizi.length}',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -396,7 +418,7 @@ class _HomePageState extends State<HomePage> {
 
                   const SizedBox(height: 18),
 
-                  if (!esercizi.containsKey(giorno))
+                  if (esercizi.isEmpty)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.all(20),
@@ -404,175 +426,167 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
 
-                  if (esercizi.containsKey(giorno))
-                    ...[
-                      ...List.generate(
-                        esercizi[giorno]!.length,
-                        (index) {
-                          final esercizio =
-                              esercizi[giorno]![index];
+                  if (listaEsercizi.isNotEmpty)
+                    ...List.generate(
+                      listaEsercizi.length,
+                      (index) {
+                        final esercizio =
+                            listaEsercizi[index];
 
-                          return Padding(
+                        return Padding(
+                          padding:
+                              const EdgeInsets.only(
+                            bottom: 12,
+                          ),
+                          child: Container(
                             padding:
-                                const EdgeInsets.only(
-                              bottom: 12,
+                                const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
                             ),
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    const Color(0xFFF5F6FA),
-                                borderRadius:
-                                    BorderRadius.circular(
-                                  14,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
+                            decoration: BoxDecoration(
+                              color:
+                                  const Color(0xFFF5F6FA),
+                              borderRadius:
+                                  BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              children: [
 
-                                  Container(
-                                    width: 32,
-                                    height: 32,
-                                    alignment:
-                                        Alignment.center,
-                                    decoration:
-                                        BoxDecoration(
-                                      color:
-                                          Colors.blue.shade50,
-                                      borderRadius:
-                                          BorderRadius.circular(
-                                        10,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '${index + 1}',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight:
-                                            FontWeight.bold,
-                                        color:
-                                            Colors.blue.shade700,
-                                      ),
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  alignment:
+                                      Alignment.center,
+                                  decoration:
+                                      BoxDecoration(
+                                    color:
+                                        Colors.blue.shade50,
+                                    borderRadius:
+                                        BorderRadius.circular(
+                                      10,
                                     ),
                                   ),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      color:
+                                          Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ),
 
-                                  const SizedBox(width: 12),
+                                const SizedBox(width: 12),
 
-                                  Expanded(
-                                    child: Text(
-                                      esercizio,
-                                      style:
+                                Expanded(
+                                  child: Text(
+                                    esercizio,
+                                    style:
+                                        const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight:
+                                          FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 10),
+
+                                SizedBox(
+                                  width: 95,
+                                  child: TextField(
+                                    keyboardType:
+                                        const TextInputType
+                                            .numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                    textAlign:
+                                        TextAlign.center,
+                                    style:
+                                        const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight:
+                                          FontWeight.bold,
+                                    ),
+                                    decoration:
+                                        InputDecoration(
+                                      suffixText: 'kg',
+                                      suffixStyle:
                                           const TextStyle(
-                                        fontSize: 15,
                                         fontWeight:
                                             FontWeight.w600,
+                                        color:
+                                            Colors.grey,
+                                      ),
+                                      filled: true,
+                                      fillColor:
+                                          Colors.white,
+                                      border:
+                                          OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                          10,
+                                        ),
+                                        borderSide:
+                                            BorderSide(
+                                          color: Colors
+                                              .grey.shade300,
+                                        ),
+                                      ),
+                                      enabledBorder:
+                                          OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                          10,
+                                        ),
+                                        borderSide:
+                                            BorderSide(
+                                          color: Colors
+                                              .grey.shade300,
+                                        ),
+                                      ),
+                                      focusedBorder:
+                                          OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                          10,
+                                        ),
+                                        borderSide:
+                                            const BorderSide(
+                                          width: 2,
+                                        ),
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets
+                                              .symmetric(
+                                        horizontal: 10,
+                                        vertical: 12,
                                       ),
                                     ),
+                                    onChanged: (value) {
+                                      pesi[esercizio] =
+                                          value;
+                                    },
                                   ),
-
-                                  const SizedBox(width: 10),
-
-                                  SizedBox(
-                                    width: 95,
-                                    child: TextField(
-                                      keyboardType:
-                                          const TextInputType
-                                              .numberWithOptions(
-                                        decimal: true,
-                                      ),
-                                      textAlign:
-                                          TextAlign.center,
-                                      style:
-                                          const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight:
-                                            FontWeight.bold,
-                                      ),
-                                      decoration:
-                                          InputDecoration(
-                                        suffixText: 'kg',
-                                        suffixStyle:
-                                            const TextStyle(
-                                          fontWeight:
-                                              FontWeight.w600,
-                                          color:
-                                              Colors.grey,
-                                        ),
-                                        filled: true,
-                                        fillColor:
-                                            Colors.white,
-                                        border:
-                                            OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius
-                                                  .circular(
-                                            10,
-                                          ),
-                                          borderSide:
-                                              BorderSide(
-                                            color: Colors
-                                                .grey.shade300,
-                                          ),
-                                        ),
-                                        enabledBorder:
-                                            OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius
-                                                  .circular(
-                                            10,
-                                          ),
-                                          borderSide:
-                                              BorderSide(
-                                            color: Colors
-                                                .grey.shade300,
-                                          ),
-                                        ),
-                                        focusedBorder:
-                                            OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius
-                                                  .circular(
-                                            10,
-                                          ),
-                                          borderSide:
-                                              const BorderSide(
-                                            width: 2,
-                                          ),
-                                        ),
-                                        contentPadding:
-                                            const EdgeInsets
-                                                .symmetric(
-                                          horizontal: 10,
-                                          vertical: 12,
-                                        ),
-                                      ),
-                                      onChanged: (value) {
-                                        pesi[esercizio] =
-                                            value;
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
           ),
 
           const SizedBox(height: 20),
-
-          // ==============================
-          // NOTE
-          // ==============================
 
           Card(
             elevation: 0,
@@ -617,15 +631,18 @@ class _HomePageState extends State<HomePage> {
                             BorderRadius.circular(14),
                         borderSide: BorderSide.none,
                       ),
-                      enabledBorder: OutlineInputBorder(
+                      enabledBorder:
+                          OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(14),
                         borderSide: BorderSide.none,
                       ),
-                      focusedBorder: OutlineInputBorder(
+                      focusedBorder:
+                          OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(14),
-                        borderSide: const BorderSide(
+                        borderSide:
+                            const BorderSide(
                           width: 2,
                         ),
                       ),
@@ -640,15 +657,13 @@ class _HomePageState extends State<HomePage> {
 
           const SizedBox(height: 20),
 
-          // ==============================
-          // SALVA
-          // ==============================
-
           SizedBox(
             height: 58,
             child: ElevatedButton(
               onPressed:
-                  invioInCorso ? null : inviaAGoogle,
+                  invioInCorso
+                      ? null
+                      : inviaAGoogle,
               style: ElevatedButton.styleFrom(
                 shape: RoundedRectangleBorder(
                   borderRadius:
