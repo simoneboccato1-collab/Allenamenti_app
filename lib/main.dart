@@ -45,7 +45,7 @@ class _HomePageState extends State<HomePage> {
       TextEditingController();
 
   final String url =
-    'https://script.google.com/macros/s/AKfycbx5wxWJC-5kRfgcdi4Bn7Y75dybw4ilppbYg554NaxAZzhqcqJVkSZkL0jFGW5FwCCe6Q/exec';
+    'https://allenamenti-proxy.simoneboccato1.workers.dev/';
   @override
   void initState() {
     super.initState();
